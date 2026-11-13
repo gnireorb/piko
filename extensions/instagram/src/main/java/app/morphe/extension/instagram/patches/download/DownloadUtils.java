@@ -506,11 +506,17 @@ public class DownloadUtils {
         };
     }
 
+    /** sharpest DASH rendition (the list is already sorted from best to worst) or null. */
+    public DashVideoData getBestDashVideo() {
+        List<DashVideoData> videos = this.getDashVideos();
+        return videos.isEmpty() ? null : videos.get(0);
+    }
+
     /**
-     * The request for one media, as {@code variant} when one was chosen. A video with none chosen
-     * downloads as the sharpest DASH rendition, with its audio merged in, when that is sharper
-     * than the progressive file. Automatic downloads retry the same resolution before the
-     * existing progressive fallback; a chosen resolution only retries its own renditions.
+     * The request for one media, as {@code variant} when one was chosen.
+     * Always downloads as the sharpest DASH rendition, with its audio merged in, when that is sharper
+     * than the progressive file. Progressive file fallback will occur normally; however, videos without
+     * a DASH manifest lack audio since getDashVideos returns an empty list.
      */
     private static DownloadRequest buildMediaRequest(
             MediaData rootMediaData,
@@ -532,8 +538,8 @@ public class DownloadUtils {
         String variantTag = variant == null ? null : variant.getVariantTag();
         DashVideoData dashVideo = variant instanceof DashVideoData
                 ? (DashVideoData) variant
-                : isVideo && variant == null && Pref.preferDashFormat()
-                ? childMediaData.getSharperDashVideo()
+                : isVideo && variant == null
+                ? childMediaData.getBestDashVideo()
                 : null;
         if (dashVideo != null) {
             mediaUrl = dashVideo.getUrl();

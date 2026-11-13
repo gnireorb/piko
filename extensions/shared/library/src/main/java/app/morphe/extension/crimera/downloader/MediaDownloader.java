@@ -20,6 +20,9 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import android.provider.DocumentsContract;
+import android.content.pm.PackageInfo;
+import android.util.DisplayMetrics;
+import android.view.WindowManager;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -39,6 +42,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.Locale;
 
 import app.morphe.extension.crimera.constants.ExtensionStrings;
 import app.morphe.extension.crimera.PikoUtils;
@@ -54,6 +58,7 @@ public class MediaDownloader {
     private final NotificationManager notificationManager;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private static volatile String igUserAgent;
 
     public MediaDownloader(Context context) {
         Context resolvedContext = context != null ? context : Utils.getContext();
@@ -75,6 +80,33 @@ public class MediaDownloader {
             NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Downloads", NotificationManager.IMPORTANCE_LOW);
             notificationManager.createNotificationChannel(channel);
         }
+    }
+
+    private String userAgent() {
+        if (igUserAgent != null) return igUserAgent;
+        try {
+            PackageInfo info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            long versionCode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                    ? info.getLongVersionCode() : info.versionCode;
+
+            DisplayMetrics dm = new DisplayMetrics();
+            WindowManager wm = context.getSystemService(WindowManager.class);
+            wm.getDefaultDisplay().getRealMetrics(dm);
+
+            String maker = Build.MANUFACTURER.equalsIgnoreCase(Build.BRAND)
+                    ? Build.MANUFACTURER : Build.MANUFACTURER + "/" + Build.BRAND;
+
+            igUserAgent = String.format(Locale.US,
+                    "Instagram %s Android (%d/%s; %ddpi; %dx%d; %s; %s; %s; %s; %s; %d)",
+                    info.versionName, Build.VERSION.SDK_INT, Build.VERSION.RELEASE,
+                    dm.densityDpi, dm.widthPixels, dm.heightPixels,
+                    maker, Build.MODEL, Build.DEVICE, Build.HARDWARE,
+                    Locale.getDefault().toString(), versionCode);
+        } catch (Exception e) {
+            PikoUtils.logger(e);
+            return null;
+        }
+        return igUserAgent;
     }
 
     public void enqueue(DownloadRequest request) {
@@ -268,6 +300,8 @@ public class MediaDownloader {
             throws IOException {
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         try {
+            String ua = userAgent();
+            if (ua != null) conn.setRequestProperty("User-Agent", ua);
             conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
             conn.setReadTimeout(READ_TIMEOUT_MS);
             conn.connect();
